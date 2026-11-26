@@ -1,0 +1,16 @@
+{
+  "schedule": {"time": "08:00", "timezone": "America/Chicago", "retry_minutes": 15},
+  "lookback_hours": 36,
+  "count_per_language": 20,
+  "max_candidates_per_language": 100,
+  "max_articles_per_source": 15,
+  "max_per_source_in_report": 4,
+  "workers": 6,
+  "request_timeout_seconds": 20,
+  "source_timeout_seconds": 90,
+  "ai_timeout_seconds": 120,
+  "ai_batch_size": 8,
+  "ai_retries": 2,
+  "output_dir": "output",
+  "data_dir": "data"
+}

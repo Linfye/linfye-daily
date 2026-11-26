@@ -1,0 +1,2 @@
+# Windows 上提供 IANA 时区数据库；其他功能只依赖 Python 标准库。
+tzdata==2026.6
