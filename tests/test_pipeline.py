@@ -104,6 +104,51 @@ class NewsTests(unittest.TestCase):
         self.assertIsNotNone(parse_article(raw, source(), 'https://example.test/a'))
         self.assertIsNone(parse_article(b'<title>Category page</title>', source(), 'https://example.test/a'))
 
+    def test_chinese_publisher_publication_dates(self):
+        fixtures = [
+            ('yicai', 'https://www.yicai.com/news/12345.html', "<script>['actime', '2026-11-26T21:54:35+08']</script>"),
+            ('infzm', 'https://www.infzm.com/contents/12345', '<span class="nfzm-content__publish" data-time="2026-11-26 08:00:00">11-26</span>'),
+            ('eeo', 'https://www.eeo.com.cn/2026/1126/12345.shtml', "<script>var publishedTime = '2026-11-26 11:13';</script>"),
+            ('cyol', 'https://news.cyol.com/gb/news/articles/2026-11/26/content_abc.html', '<!--enpproperty <date>2026-11-26 20:39:03</date><title>测试</title>-->'),
+            ('xinhua', 'https://www.news.cn/politics/20261126/abc/c.html', '<div class="info">2026-11-26 17:36:07<span>来源：公开资料</span></div>'),
+        ]
+        for sid, url, markup in fixtures:
+            s = dict(source('zh'), id=sid)
+            raw = ('<h1>本地公共政策测试报道</h1>' + markup).encode()
+            a = parse_article(raw, s, url)
+            self.assertIsNotNone(a, sid)
+            self.assertTrue(recent(a, NOW, 36), sid)
+            self.assertEqual(a['date_basis'], 'publisher_metadata')
+            self.assertEqual(a['date_timezone_assumed'], '' if sid == 'yicai' else 'Asia/Shanghai')
+            self.assertIsNone(parse_article(raw, s, 'https://unrelated.test/news/12345.html'))
+        # 推荐文章或正文提到今天，不能把旧文章当作今天发布。
+        raw = '<h1>旧报道</h1><p>参考日期 2026-11-26 12:00:00</p>'.encode()
+        self.assertIsNone(parse_article(raw, dict(source('zh'), id='yicai'), fixtures[0][1]))
+
+    def test_language_specific_candidate_limits(self):
+        from newsdaily.collect import collect
+        ss = [dict(source('zh'), id='zh-one'), dict(source('en'), id='en-one')]
+        def fake_collect(s, cfg, now):
+            aa = [dict(article(i, s['language']), source_id=s['id']) for i in range(60)]
+            return aa, {'source_id': s['id'], 'source': s['name'], 'status': 'ok', 'count': 60, 'warnings': []}
+        self.cfg['max_candidates_by_language'] = {'zh': 50, 'en': 25}
+        with patch('newsdaily.collect.collect_source', fake_collect):
+            aa, _ = collect(ss, self.cfg, NOW)
+        self.assertEqual(sum(a['language'] == 'zh' for a in aa), 50)
+        self.assertEqual(sum(a['language'] == 'en' for a in aa), 25)
+
+    def test_rss_source_cap_can_exceed_old_15_article_limit(self):
+        from newsdaily.collect import collect_source
+        body = ''.join(f'<item><title>本地政策测试新闻第{i}篇</title><link>https://example.test/zh/{i}</link>'
+                       '<pubDate>Thu, 26 Nov 2026 14:00:00 GMT</pubDate></item>' for i in range(65))
+        raw = ('<rss><channel>' + body + '</channel></rss>').encode()
+        s = dict(source('zh'), feeds=['https://example.test/rss'])
+        self.cfg['max_articles_per_source_by_language'] = {'zh': 50}
+        with patch.object(Fetcher, 'get', return_value=(raw, 'https://example.test/rss')):
+            aa, status = collect_source(s, self.cfg, NOW)
+        self.assertEqual(len(aa), 50)
+        self.assertEqual(status['count'], 50)
+
     def test_score_validation_rejects_injection_and_wrong_language(self):
         a = article(1)
         r = result(a)

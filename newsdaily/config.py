@@ -38,6 +38,18 @@ def load_config(root=ROOT):
         raise ValueError('retry_minutes 必须大于 0')
     if cfg['max_candidates_per_language'] < cfg['count_per_language']:
         raise ValueError('候选数量不能小于目标数量')
+    cfg.setdefault('max_candidates_by_language', {'zh': max(300, cfg['max_candidates_per_language']),
+                                                'en': cfg['max_candidates_per_language']})
+    cfg.setdefault('max_articles_per_source_by_language', {'zh': max(50, cfg['max_articles_per_source']),
+                                                         'en': cfg['max_articles_per_source']})
+    for key in ('max_candidates_by_language', 'max_articles_per_source_by_language'):
+        if not isinstance(cfg[key], dict) or set(cfg[key]) - {'zh', 'en'}:
+            raise ValueError(f'{key} 必须为包含 zh/en 的配置对象')
+        for lang, value in cfg[key].items():
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f'{key}.{lang} 必须为正整数')
+            if key == 'max_candidates_by_language' and value < cfg['count_per_language']:
+                raise ValueError(f'{key}.{lang} 候选数量不能小于目标数量')
     for key in ('data_dir', 'output_dir'):
         path = (root / cfg[key]).resolve()
         if not path.is_relative_to(root.resolve()):

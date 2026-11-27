@@ -98,7 +98,9 @@ def main():
         with project_lock(cfg['data_dir'] / 'run.lock'):
             articles, statuses = collect(sources, cfg, datetime.now(timezone.utc))
             atomic_json(cfg['data_dir'] / 'candidates.json', {'articles': articles, 'sources': statuses})
-        print(f'抓取 {len(articles)} 篇；结果和来源状态：{cfg["data_dir"] / "candidates.json"}')
+        counts = {lang: sum(a['language'] == lang for a in articles) for lang in ('zh', 'en')}
+        print(f'抓取候选：中文 {counts["zh"]} 篇，英文 {counts["en"]} 篇；最终目标每种语言 {cfg["count_per_language"]} 篇。')
+        print(f'结果和来源状态：{cfg["data_dir"] / "candidates.json"}')
         return 0
     if args.command == 'due':
         return run_due(cfg, sources)

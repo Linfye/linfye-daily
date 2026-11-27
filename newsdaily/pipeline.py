@@ -92,6 +92,8 @@ def build_report(cfg, sources, now=None, collector=collect, ai=None):
     now = now or datetime.now(timezone.utc)
     ai = ai or AI(cfg, now=now)  # 缺少 API 时在抓取前提示。
     articles, statuses = collector(sources, cfg, now)
+    counts = {lang: sum(a['language'] == lang for a in articles) for lang in ('zh', 'en')}
+    print(f'AI 候选池：中文 {counts["zh"]} 篇，英文 {counts["en"]} 篇；最终目标每种语言 {cfg["count_per_language"]} 篇。', flush=True)
     scored, errors = [], []
     size = cfg['ai_batch_size']
     for start in range(0, len(articles), size):

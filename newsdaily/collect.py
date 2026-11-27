@@ -13,6 +13,7 @@ from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit, urlunsplit, parse_qsl, urlencode
 from urllib.request import Request, urlopen
+from .publishers import publisher_metadata, article_url_pattern
 
 UTC = timezone.utc
 AGENT = 'LinfyeDaily/1.0'
@@ -186,6 +187,13 @@ def parse_article(raw, source, url):
         if a:
             a['date_basis'] = 'published'
         return a
+    metadata = publisher_metadata(raw.decode('utf-8', errors='replace'), source, url)
+    if metadata:
+        a = item(source, metadata['title'], url,
+                 page.meta.get('og:description') or page.meta.get('description'), metadata['published_at'])
+        if a:
+            a.update({k: metadata[k] for k in ('date_basis', 'date_timezone_assumed')})
+        return a
     return None
 
 
@@ -254,6 +262,8 @@ class Fetcher:
 
 
 def collect_source(source, cfg, now):
+    article_limit = cfg.get('max_articles_per_source_by_language', {}).get(source['language'], cfg['max_articles_per_source'])
+    scan_limit = max(article_limit * 3, 45)
     status = {'source_id': source['id'], 'source': source['name'], 'status': 'ok',
               'count': 0, 'warnings': []}
     if not source.get('enabled', True) or not (source.get('url') or source.get('feeds')):
@@ -288,7 +298,15 @@ def collect_source(source, cfg, now):
                         len(title) >= 10 and url not in seen and urlsplit(url).path not in ('', '/')):
                     seen.add(url)
                     candidates.append(url)
-            for url in candidates[:cfg['max_articles_per_source']]:
+            pattern = article_url_pattern(source)
+            if pattern:
+                candidates = [u for u in candidates if re.search(pattern, urlsplit(u).path)]
+            for url in candidates[:scan_limit]:
+                if time.monotonic() >= fetcher.deadline:
+                    status['warnings'].append('来源抓取时间预算已用完')
+                    break
+                if len({a['url'] for a in articles if recent(a, now, cfg['lookback_hours'])}) >= article_limit:
+                    break
                 try:
                     raw, final_url = fetcher.get(url)
                     a = parse_article(raw, source, final_url)
@@ -300,7 +318,7 @@ def collect_source(source, cfg, now):
             status['warnings'].append('公开页面: ' + str(e)[:160])
     unique = {a['url']: a for a in articles if recent(a, now, cfg['lookback_hours'])}
     articles = sorted(unique.values(), key=lambda a: a['published_at'], reverse=True)[
-        :cfg['max_articles_per_source']]
+        :article_limit]
     status['count'] = len(articles)
     status['warnings'] = status['warnings'][:8]
     if not articles:
@@ -326,12 +344,13 @@ def collect(sources, cfg, now):
     # 轮询各源选候选，避免名单前面的媒体耗尽 API 预算。
     selected, seen = [], set()
     for lang in ('zh', 'en'):
+        limit = cfg.get('max_candidates_by_language', {}).get(lang, cfg['max_candidates_per_language'])
         buckets = [[a for a in articles if a['source_id'] == s['id'] and a['language'] == lang]
                    for s in sources]
         n = 0
-        while any(buckets) and n < cfg['max_candidates_per_language']:
+        while any(buckets) and n < limit:
             for bucket in buckets:
-                if bucket and n < cfg['max_candidates_per_language']:
+                if bucket and n < limit:
                     a = bucket.pop(0)
                     key = canonical(a['url'])
                     title_key = (lang, re.sub(r'\W', '', a['title']).lower())

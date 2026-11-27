@@ -12,7 +12,7 @@
   {"id":"mingpao","name":"明报","language":"zh","region":"香港","url":"https://news.mingpao.com/","feeds":["https://news.mingpao.com/rss/pns/s00001.xml"]},
   {"id":"hk01","name":"香港01","language":"zh","region":"香港","url":"https://www.hk01.com/"},
   {"id":"hkej","name":"信报","language":"zh","region":"香港","url":"https://www.hkej.com/"},
-  {"id":"cna","name":"中央社","language":"zh","region":"台湾","url":"https://www.cna.com.tw/","feeds":["https://feeds.feedburner.com/rsscna/main"]},
+  {"id":"cna","name":"中央社","language":"zh","region":"台湾","url":"https://www.cna.com.tw/","feeds":["https://feeds.feedburner.com/rsscna/politics","https://feeds.feedburner.com/rsscna/local","https://feeds.feedburner.com/rsscna/lifehealth"]},
   {"id":"udn","name":"联合报／联合新闻网","language":"zh","region":"台湾","url":"https://udn.com/","feeds":["https://udn.com/rssfeed/news/2/6638?ch=news"]},
   {"id":"twreporter","name":"报道者","language":"zh","region":"台湾","url":"https://www.twreporter.org/","feeds":["https://www.twreporter.org/a/rss2.xml"]},
   {"id":"cw","name":"天下杂志","language":"zh","region":"台湾","url":"https://www.cw.com.tw/"},
