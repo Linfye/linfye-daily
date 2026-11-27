@@ -65,6 +65,7 @@ def item(source, title, url, description, published, body=''):
         return None
     return dict(id=hashlib.sha256(url.encode()).hexdigest()[:20], title=title, url=url,
                 source_id=source['id'], source=source['name'], language=source['language'],
+                source_region=source.get('region', ''),
                 kind=source.get('kind', 'news'), published_at=published or '',
                 excerpt=description[:2000], body=body[:10000],
                 evidence='public_article' if body else 'feed_or_metadata')

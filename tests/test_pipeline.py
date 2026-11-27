@@ -35,7 +35,7 @@ def result(a):
     return {'id': a['id'], 'summary': '公开资料显示政策发生变化。' if a['language'] == 'zh' else 'Public records describe a policy change.',
             'importance': 40 if '<script>' in a['title'] else 30, 'credibility': 20, 'timeliness': 18, 'originality': 10,
             'international': a['language'] == 'en', 'origin': 'original', 'content_type': 'news',
-            'event_key': a['id']}
+            'event_key': a['id'], 'local_relevance': 'unknown', 'local_reason': ''}
 
 
 class FakeAPI(BaseHTTPRequestHandler):
@@ -129,6 +129,65 @@ class NewsTests(unittest.TestCase):
         selected, _ = choose(scored, [[a['id'] for a in aa]], 20, 4)
         self.assertEqual(len(selected['zh']), 0)
         self.assertEqual(selected['en'][0]['id'], scored[2]['id'])
+
+    def test_local_chinese_news_preference_and_fallback(self):
+        local, foreign, unknown = [article(i, 'zh') for i in range(3)]
+        for a in (local, foreign, unknown):
+            a['source_region'] = '马来西亚'
+        rows = [result(a) for a in (local, foreign, unknown)]
+        rows[0].update(local_relevance='local', local_reason='报道马来西亚本地预算政策。')
+        rows[1].update(local_relevance='nonlocal')
+        scored = validate_scores({'articles': rows}, [local, foreign, unknown])
+        scored[0]['score'], scored[1]['score'], scored[2]['score'] = 78, 85, 80
+        groups = [[a['id']] for a in scored]
+        chosen, _ = choose(scored, groups, 3, 4)
+        self.assertEqual([a['id'] for a in chosen['zh']], [local['id'], foreign['id'], unknown['id']])
+        self.assertEqual(chosen['zh'][0]['score'], 78)  # 基础分不被加分覆盖。
+        no_bonus, _ = choose(scored, groups, 1, 4, local_news_bonus=0)
+        self.assertEqual(no_bonus['zh'][0]['id'], foreign['id'])
+        scored[1]['score'] = 95  # 重大非本地新闻仍有入选空间。
+        important, _ = choose(scored, groups, 1, 4)
+        self.assertEqual(important['zh'][0]['id'], foreign['id'])
+
+    def test_local_preference_applies_when_selecting_duplicate_story(self):
+        aa = [article(10, 'zh'), article(11, 'zh')]
+        for a in aa:
+            a['source_region'] = '马来西亚'
+        rows = [result(a) for a in aa]
+        rows[0].update(local_relevance='local', local_reason='事件核心为马来西亚公共交通。')
+        rows[1].update(local_relevance='nonlocal')
+        scored = validate_scores({'articles': rows}, aa)
+        scored[0].update(score=78, international=False)
+        scored[1].update(score=85, international=False)
+        chosen, _ = choose(scored, [[a['id'] for a in aa]], 20, 4)
+        self.assertEqual([a['id'] for a in chosen['zh']], [aa[0]['id']])
+
+    def test_locality_cannot_be_claimed_without_region_or_evidence(self):
+        for lang, region in [('en', '马来西亚'), ('zh', ''), ('zh', '跨地区')]:
+            a = article(20, lang)
+            a['source_region'] = region
+            row = result(a)
+            row.update(local_relevance='local', local_reason='模型声称本地新闻。')
+            with self.assertRaises(ValueError):
+                validate_scores({'articles': [row]}, [a])
+        a = article(21, 'zh')
+        a['source_region'] = '马来西亚'
+        row = result(a)
+        row.update(local_relevance='local', local_reason='')
+        with self.assertRaises(ValueError):
+            validate_scores({'articles': [row]}, [a])
+
+    def test_source_regions_reach_ai_without_model_override(self):
+        sources = {s['id']: s for s in load_sources()}
+        for sid, region in [('sinchew', '马来西亚'), ('zaobao', '新加坡'),
+                            ('hk01', '香港'), ('cna', '台湾'), ('caixin', '大陆')]:
+            a = item(sources[sid], '本地公共政策发布', 'https://example.test/' + sid,
+                     '当地居民和公共政策的公开资料。', NOW.isoformat())
+            self.assertEqual(a['source_region'], region)
+            row = result(a)
+            row.update(source_region='被模型篡改', local_relevance='local', local_reason='公开资料指向当地政策。')
+            scored = validate_scores({'articles': [row]}, [a])[0]
+            self.assertEqual(scored['source_region'], region)
 
     def test_scheduler_timezone_retry_and_day_rollover(self):
         self.assertTrue(due(NOW, self.cfg, {}))  # 09:00 Chicago

@@ -39,7 +39,12 @@ def project_lock(path):
         f.close()
 
 
-def choose(articles, groups, count, max_per_source):
+def choose(articles, groups, count, max_per_source, local_news_bonus=12):
+    def rank(a):
+        local = (a['language'] == 'zh' and a.get('source_region', '') not in ('', '跨地区')
+                 and a.get('local_relevance') == 'local')
+        return a['score'] + (local_news_bonus if local else 0)
+
     by_id = {a['id']: a for a in articles}
     winners = []
     for group in groups:
@@ -51,9 +56,9 @@ def choose(articles, groups, count, max_per_source):
             candidates = [a for a in candidates if a['language'] == 'en']
             candidates.sort(key=lambda a: (a['origin'] == 'original', a['score']), reverse=True)
         else:
-            candidates.sort(key=lambda a: a['score'], reverse=True)
+            candidates.sort(key=rank, reverse=True)
         winners.append(candidates[0])
-    winners.sort(key=lambda a: (a['score'], a['published_at'], a['id']), reverse=True)
+    winners.sort(key=lambda a: (rank(a), a['published_at'], a['id']), reverse=True)
     result, relaxed = {'zh': [], 'en': []}, []
     for lang in ('zh', 'en'):
         pool = [a for a in winners if a['language'] == lang]
@@ -71,7 +76,7 @@ def choose(articles, groups, count, max_per_source):
                 break
             result[lang].append(a)
             relaxed.append(lang)
-        result[lang].sort(key=lambda a: a['score'], reverse=True)
+        result[lang].sort(key=rank, reverse=True)
     return result, sorted(set(relaxed))
 
 
@@ -98,7 +103,8 @@ def build_report(cfg, sources, now=None, collector=collect, ai=None):
     if scored:
         # 全局事件去重失败时终止，避免静默产生多语种重复日报。
         groups = ai.clusters(scored)
-        chosen, relaxed = choose(scored, groups, cfg['count_per_language'], cfg['max_per_source_in_report'])
+        chosen, relaxed = choose(scored, groups, cfg['count_per_language'], cfg['max_per_source_in_report'],
+                                 cfg.get('local_news_bonus', 12))
     else:
         chosen, relaxed = {'zh': [], 'en': []}, []
     warnings = list(errors)

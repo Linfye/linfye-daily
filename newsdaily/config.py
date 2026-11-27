@@ -19,6 +19,11 @@ def load_env(root=ROOT):
 
 def load_config(root=ROOT):
     cfg = json.loads((root / 'config.json').read_text(encoding='utf-8-sig'))
+    # 兼容服务器已有配置，不要求用户覆盖其出报时间设置。
+    cfg.setdefault('local_news_bonus', 12)
+    bonus = cfg['local_news_bonus']
+    if isinstance(bonus, bool) or not isinstance(bonus, (int, float)) or not 0 <= bonus <= 30:
+        raise ValueError('local_news_bonus 必须为 0–30 的数字')
     if not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', cfg['schedule']['time']):
         raise ValueError('schedule.time 必须为 HH:MM')
     ZoneInfo(cfg['schedule']['timezone'])
